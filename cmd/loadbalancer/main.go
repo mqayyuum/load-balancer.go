@@ -5,14 +5,24 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"sync"
 )
 
+var mutex sync.Mutex
 var backends = []string{
 	"http://localhost:8081",
 	"http://localhost:8082",
 	"http://localhost:8083",
 }
 var currentBackend = 0
+
+func selectBackend() string {
+	mutex.Lock()
+	backend := backends[currentBackend]
+	currentBackend = (currentBackend + 1) % len(backends)
+	mutex.Unlock()
+	return backend
+}
 
 func handler(w http.ResponseWriter, r *http.Request) {
 	host := r.Host
@@ -41,9 +51,7 @@ func main() {
 }
 
 func forwardReq(w http.ResponseWriter, r *http.Request) {
-	backend := backends[currentBackend]
-
-	currentBackend = (currentBackend + 1) % len(backends)
+	backend := selectBackend()
 
 	// Create a new request to forward
 	req, err := http.NewRequest(r.Method, backend, r.Body)
