@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 var mutex sync.Mutex
@@ -16,11 +17,44 @@ var backends = []string{
 }
 var currentBackend = 0
 
-func selectBackend() string {
+func checkHealth(backend string, healthCh chan<- string) {
+	healthCh <- backend
+}
+
+var healthyBackends []string
+
+func updateHealthyBackends() {
+	healthyCh := make(chan string)
+
+	for {
+		for _, backend := range backends {
+			go checkHealth(backend, healthyCh)
+		}
+
+		select {
+		case backend := <-healthyCh:
+			// Update the list of healthy backends
+			mutex.Lock()
+			healthyBackends = append(healthyBackends, backend)
+			mutex.Unlock()
+		case <-time.After(10 * time.Second):
+			// Timeout: clear the list and start over
+			mutex.Lock()
+			healthyBackends = []string{}
+			mutex.Unlock()
+		}
+	}
+}
+
+func selectHealthyBackend() string {
 	mutex.Lock()
-	backend := backends[currentBackend]
-	currentBackend = (currentBackend + 1) % len(backends)
-	mutex.Unlock()
+	defer mutex.Unlock()
+
+	if len(healthyBackends) == 0 {
+		return ""
+	}
+	backend := healthyBackends[currentBackend]
+	currentBackend = (currentBackend + 1) % len(healthyBackends)
 	return backend
 }
 
@@ -41,6 +75,8 @@ func handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	go updateHealthyBackends()
+
 	http.HandleFunc("/", handler)
 
 	fmt.Println("Server is running on http://localhost:8080")
@@ -51,7 +87,7 @@ func main() {
 }
 
 func forwardReq(w http.ResponseWriter, r *http.Request) {
-	backend := selectBackend()
+	backend := selectHealthyBackend()
 
 	// Create a new request to forward
 	req, err := http.NewRequest(r.Method, backend, r.Body)
