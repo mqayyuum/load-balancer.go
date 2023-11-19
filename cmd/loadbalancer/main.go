@@ -9,12 +9,11 @@ import (
 	"time"
 )
 
-var mutex sync.Mutex
-var backends = []string{
-	"http://localhost:8081",
-	"http://localhost:8082",
-	"http://localhost:8083",
-}
+var (
+	mutex    sync.Mutex
+	backends []string
+)
+
 var currentBackend = 0
 
 func checkHealth(backend string, healthCh chan<- string) {
@@ -74,10 +73,45 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 }
 
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	server := r.URL.Query().Get("server")
+	switch r.Method {
+	case http.MethodPost: // Register a new backend
+		if server == "" {
+			http.Error(w, "Server not specified", http.StatusBadRequest)
+		}
+
+		mutex.Lock()
+		backends = append(backends, server)
+		mutex.Unlock()
+		fmt.Fprintf(w, "Registered backend: %s\n", server)
+
+	case http.MethodDelete:
+		if server == "" {
+			http.Error(w, "Server not specified", http.StatusBadRequest)
+		}
+
+		mutex.Lock()
+		for i, backend := range backends {
+			if backend == server {
+				backends = append(backends[:i], backends[i+1:]...)
+				break
+			}
+		}
+
+		mutex.Unlock()
+		fmt.Fprintf(w, "Deregistered backend: %s\n", server)
+
+	default:
+		http.Error(w, "Unsupported method", http.StatusMethodNotAllowed)
+	}
+}
+
 func main() {
 	go updateHealthyBackends()
 
 	http.HandleFunc("/", handler)
+	http.HandleFunc("/register", registerHandler)
 
 	fmt.Println("Server is running on http://localhost:8080")
 	err := http.ListenAndServe(":8080", nil)
