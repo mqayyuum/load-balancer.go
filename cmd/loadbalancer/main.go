@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/mqayyuum/load-balancer-go/pkg/utils"
 )
 
 var (
@@ -70,18 +72,13 @@ func selectHealthyBackend() string {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
-	host := r.Host
-	userAgent := r.UserAgent()
-	method := r.Method
-	protocol := r.Proto
-	accept := r.Header.Get("Accept")
-
-	if accept == "" {
-		accept = "* / *"
+	info, err := utils.GetUtils(r)
+	if err != nil {
+		http.Error(w, "Unable to process request", http.StatusBadRequest)
 	}
 	forwardReq(w, r)
 
-	fmt.Fprintf(w, "Received request from %s\n%s / %s\nHost: %s\nUser-Agent: %s\nAccept: %s", host, method, protocol, host, userAgent, accept)
+	fmt.Fprintf(w, "Received request from %s\n%s / %s\nHost: %s\nUser-Agent: %s\nAccept: %s", info.IP, info.Method, info.Protocol, info.Host, info.UserAgent, info.Accept)
 
 }
 
