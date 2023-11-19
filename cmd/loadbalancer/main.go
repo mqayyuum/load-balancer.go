@@ -20,6 +20,18 @@ func checkHealth(backend string, healthCh chan<- string) {
 	healthCh <- backend
 }
 
+func isHealthy(server string) bool {
+	resp, err := http.Get(server + "/health")
+	if err != nil {
+		log.Printf("Health check failed for server %s: %v", server, err)
+		return false
+	}
+
+	defer resp.Body.Close()
+
+	return resp.StatusCode == http.StatusOK
+}
+
 var healthyBackends []string
 
 func updateHealthyBackends() {
@@ -79,6 +91,11 @@ func registerHandler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost: // Register a new backend
 		if server == "" {
 			http.Error(w, "Server not specified", http.StatusBadRequest)
+		}
+
+		if !isHealthy(server) {
+			http.Error(w, "Backend server is not healthy", http.StatusServiceUnavailable)
+			return
 		}
 
 		mutex.Lock()

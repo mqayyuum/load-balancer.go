@@ -19,10 +19,15 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "Received request from %s\n%s / %s\nHost: %s\nUser-Agent: %s\nAccept: %s", host, method, protocol, host, userAgent, accept)
 }
 
+func health(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+}
+
 func main() {
 	port := flag.String("port", "8081", "Port to run the server on")
 	flag.Parse()
 
+	http.HandleFunc("/health", health)
 	http.HandleFunc("/", handler)
 
 	fmt.Printf("Server is running on http://localhost:%s\n", *port)
